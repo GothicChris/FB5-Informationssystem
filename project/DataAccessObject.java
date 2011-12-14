@@ -243,7 +243,6 @@ public class DataAccessObject implements edu.fhge.gdb.DataAccessObject {
             throws ApplicationException {
         
         
-        
         throw new UnsupportedOperationException("Not supported yet.");
     }
 
