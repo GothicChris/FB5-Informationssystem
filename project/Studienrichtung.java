@@ -34,8 +34,8 @@ public class Studienrichtung implements edu.fhge.gdb.entity.Studienrichtung{
         boolean equal = false;
         if (obj != null && getClass() == obj.getClass()) {
          Studienrichtung studienrichtung = (Studienrichtung) obj;
-         equal = this.kuerzel.equals(studienrichtung.kuerzel) &&
-                 this.name.equals(studienrichtung.name);
+         equal = this.kuerzel.toLowerCase().equals(studienrichtung.kuerzel.toLowerCase()) &&
+                 this.name.toLowerCase().equals(studienrichtung.name.toLowerCase());
         }
         return equal;
     }

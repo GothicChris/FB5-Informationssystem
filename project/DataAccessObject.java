@@ -45,8 +45,8 @@ public class DataAccessObject implements edu.fhge.gdb.DataAccessObject {
     public List<List<String>> getStudienverlaufsplan(Studienrichtung sr)
             throws ApplicationException {
         
-        
         List<List<String>> spalten = new ArrayList<List<String>>();
+        
         
         ArrayList<String> zeile1 = new ArrayList();
         
@@ -59,6 +59,9 @@ public class DataAccessObject implements edu.fhge.gdb.DataAccessObject {
         zeile1.add("6. Semester");
         zeile1.add("");
         
+        spalten.add(zeile1);
+        
+        
         ArrayList<String> zeile2 = new ArrayList();
         
         zeile2.add("Nr  Kategorie");
@@ -70,9 +73,10 @@ public class DataAccessObject implements edu.fhge.gdb.DataAccessObject {
         zeile2.add("Mod  V  Ü  P  Cr");
         zeile2.add("Summe");
         
-        spalten.add(zeile1);
         spalten.add(zeile2);
         
+        
+        ArrayList<Studienverlauf> studienverlauf = new ArrayList();
         
         String sql = "SELECT SR.SKUERZEL, K.LFDNR, K.NAME, "
             + "KU.SEM, KU.MKUERZEL, M.MODULNAME, M.VL, "
@@ -84,14 +88,11 @@ public class DataAccessObject implements edu.fhge.gdb.DataAccessObject {
             + "AND K.LFDNR = KU.LFDNR " 
             + "AND M.MKUERZEL = KU.MKUERZEL "
             + "ORDER BY K.LFDNR, KU.SEM";
-
-        ArrayList<Studienverlauf> studienverlauf = new ArrayList();
         
-        Statement sqlStatement = null;
         ResultSet sqlResult = null;
         try {
-            sqlStatement = connection.createStatement();
-            sqlResult = sqlStatement.executeQuery(sql);
+            
+            sqlResult = executeQuery(sql);
             
             Studienverlauf sv = new Studienverlauf(0, "");
             while(sqlResult.next()) {
@@ -107,23 +108,24 @@ public class DataAccessObject implements edu.fhge.gdb.DataAccessObject {
                         pr, 
                         sqlResult.getInt("CREDITS"));
                 if(sv.getKategorieNr() == sqlResult.getInt("LFDNR")) {
+                    
                     sv.addSemesterModul(sqlResult.getInt("SEM"), modul);
                 } else {
+                    
                     sv = new Studienverlauf(sqlResult.getInt("LFDNR"), 
                                                  sqlResult.getString("NAME"));
                     sv.addSemesterModul(sqlResult.getInt("SEM"), modul);
                     studienverlauf.add(sv);
-                    
                 }
             }
-            
-//            System.out.println(studienverlauf);
-            
         } catch (SQLException ex) {
+            
             System.out.println(ex.getMessage());
         }
         
+        
         for(int i = 0; i < studienverlauf.size(); i++) {
+            
             ArrayList<String> zeile = new ArrayList();
             Studienverlauf aktVerlauf = studienverlauf.get(i);
             zeile.add(aktVerlauf.getKategorieNr() + "  " + aktVerlauf.getKategorie());
@@ -172,18 +174,11 @@ public class DataAccessObject implements edu.fhge.gdb.DataAccessObject {
                 + vorname + "',"
                 + " '" + adresse + "', '" + srKuerzel + "')";
         
-        
-        Statement sqlStatement = null;
         try {
-            sqlStatement = connection.createStatement();
+            
+            execute(sql);
         } catch (SQLException ex) {
-            System.out.println(ex.getMessage());
-        }
-        
-        
-        try {
-            sqlStatement.execute(sql);
-        } catch (SQLException ex) {
+            
             System.out.println(ex.getMessage());
             throw new ApplicationException("Matrikelnummer bereits vergeben.");
         }
@@ -192,31 +187,19 @@ public class DataAccessObject implements edu.fhge.gdb.DataAccessObject {
     @Override
     public Collection<Student> getAllStudent() {
         
+        ArrayList<Student> studentList = new ArrayList<Student>();
+        
+        
         String sql = "SELECT S.*, SR.SKUERZEL, SR.NAME AS SRNAME"
                 + " FROM STUDENT S, STUDIENRICHTUNG SR"
                 + " WHERE S.STUDIENRICHTUNG = SR.SKUERZEL"
                 + " ORDER BY S.NAME";
         
-        
-        Statement sqlStatement = null;
-        try {
-            sqlStatement = connection.createStatement();
-        } catch (SQLException ex) {
-            System.out.println(ex.getMessage());
-        }
-        
-        
         ResultSet sqlResult = null;
         try {
-            sqlResult = sqlStatement.executeQuery(sql);
-        } catch (SQLException ex) {
-            System.out.println(ex.getMessage());
-        }
-        
-        
-        ArrayList<Student> studentList = new ArrayList<Student>();
-        
-        try {
+            
+            sqlResult = executeQuery(sql);
+            
             while(sqlResult.next()) {
                 
                 Student tempStudent = new project.Student(
@@ -231,8 +214,10 @@ public class DataAccessObject implements edu.fhge.gdb.DataAccessObject {
                 studentList.add(tempStudent);
             }
         } catch (SQLException ex) {
+            
             System.out.println(ex.getMessage());
         }
+        
         
         return studentList;
     }
@@ -242,52 +227,153 @@ public class DataAccessObject implements edu.fhge.gdb.DataAccessObject {
             String adresse, String srKuerzel, Modul modul, String semester)
             throws ApplicationException {
         
+        boolean announced = true;
         
-        throw new UnsupportedOperationException("Not supported yet.");
+        String sql = "SELECT NAME"
+                + " FROM STUDIENRICHTUNG"
+                + " WHERE SRKUERZEL = '" + srKuerzel + "'";
+        
+        ResultSet targetStudienrichtungResult =  null;
+        try {
+            
+            targetStudienrichtungResult = executeQuery(sql);
+        } catch (SQLException ex) {
+            
+            throw new ApplicationException(ex.getMessage());
+        }
+        
+        project.Studienrichtung targetStudienrichtung = null;
+        try {
+            
+            if(targetStudienrichtungResult.next()) {
+                
+                targetStudienrichtung =
+                        new project.Studienrichtung(srKuerzel,
+                                targetStudienrichtungResult.getString("NAME"));
+            } else {
+                throw new ApplicationException(
+                        "Studienrichtung nicht vorhanden!");
+            }
+        } catch (SQLException ex) {
+            
+            throw new ApplicationException(ex.getMessage());
+        }
+        
+        project.Student studentToAnnounce = new project.Student(matrikel, name,
+                vorname, adresse, targetStudienrichtung);
+        
+        /*
+         * Zum Vergleich des Studenten, der eingetragen werden muss und dem
+         * Studenten der in der Datenbank zu der übergebenen vorliegt
+         */
+        sql = "SELECT S.*, SR.NAME AS SRNAME"
+                + " FROM STUDENT S, STUDIENRICHTUNG SR"
+                + " WHERE MATRIKEL = '" + matrikel + "'"
+                + " AND S.SKUERZEL = SR.SKUERZEL";
+        
+        ResultSet studentFromDatabaseResult = null;
+        try {
+            
+            studentFromDatabaseResult = executeQuery(sql);
+        } catch (SQLException ex) {
+            
+            throw new ApplicationException(ex.getMessage());
+        }
+        
+        project.Studienrichtung sfdbStudienrichtung = null;
+        project.Student studentFromDatabase = null;
+        
+        try {
+            
+            if(studentFromDatabaseResult.next()) {
+                sfdbStudienrichtung = new project.Studienrichtung(srKuerzel,
+                        studentFromDatabaseResult.getString("SRNAME"));
+                studentFromDatabase = new project.Student(
+                        studentFromDatabaseResult.getString("MATRIKEL"),
+                        studentFromDatabaseResult.getString("NAME"),
+                        studentFromDatabaseResult.getString("VORNAME"),
+                        studentFromDatabaseResult.getString("ADRESSE"),
+                        sfdbStudienrichtung);
+            }
+        } catch (SQLException ex) {
+            
+            throw new ApplicationException(ex.getMessage());
+        }
+        
+        if(studentFromDatabase == null)
+        {
+            
+            addStudent(studentToAnnounce.getMatrikel(),
+                    studentToAnnounce.getName(),
+                    studentToAnnounce.getVorname(),
+                    studentToAnnounce.getAdresse(),
+                    studentToAnnounce.getStudienrichtungKuerzel());
+        
+            sql = "INSERT INTO PRAKTIKUMSTEILNAHME"
+                    + " VALUES('" + studentToAnnounce.getMatrikel() + "',"
+                    + " '" + modul.getKuerzel() + "' ,"
+                    + " '" + semester + "',"
+                    + " 0)";
+        } else {
+            
+            if(studentToAnnounce.equals(studentFromDatabase))
+            {
+                
+                sql = "INSERT INTO PRAKTIKUMSTEILNAHME"
+                        + " VALUES('" + studentToAnnounce.getMatrikel() + "',"
+                        + " '" + modul.getKuerzel() + "' ,"
+                        + " '" + semester + "',"
+                        + " 0)";
+            } else {
+                
+                throw new ApplicationException("Student mit anderen Daten bereits im System vorhanden.");
+            }
+        }
+        
+        try {
+
+            execute(sql);
+        } catch (SQLException ex) {
+
+            announced = false;
+        }
+
+        return announced;
+        
     }
 
     @Override
     public void setTestate(Collection<Praktikumsteilnahme> testate) {
+        // TODO Methode ausfertigen
         throw new UnsupportedOperationException("Not supported yet.");
     }
 
     @Override
     public JPanel getChart(int type, Object parameter1, Object parameter2) throws ApplicationException {
+        // TODO Methode ausfertigen
         throw new UnsupportedOperationException("Not supported yet.");
     }
 
     @Override
     public void exportAnnouncementList(OutputStream target, String semester) {
-        System.out.println("exportAnnouncementList");
-        
+        // TODO Methode ausfertigen
+        throw new UnsupportedOperationException("Not supported yet.");
     }
 
     @Override
     public Collection<Studienrichtung> getAllStudienrichtung() {
         
-        String sql = "SELECT * FROM STUDIENRICHTUNG ORDER BY SKUERZEL";
-        
-        
-        Statement sqlStatement = null;
-        try {
-            sqlStatement = connection.createStatement();
-        } catch (SQLException ex) {
-            System.out.println(ex.getMessage());
-        }
-        
-        
-        ResultSet sqlResult = null;
-        try {
-            sqlResult = sqlStatement.executeQuery(sql);
-        } catch (SQLException ex) {
-            System.out.println(ex.getMessage());
-        }
-        
-        
         ArrayList<Studienrichtung> studienrichtungList =
                 new ArrayList<Studienrichtung>();
+        ResultSet sqlResult = null;
+        
+        
+        String sql = "SELECT * FROM STUDIENRICHTUNG ORDER BY SKUERZEL";
         
         try {
+            
+            sqlResult = executeQuery(sql);
+            
             while(sqlResult.next()) {
                 
                 Studienrichtung tempStudienrichtung =
@@ -298,8 +384,10 @@ public class DataAccessObject implements edu.fhge.gdb.DataAccessObject {
                 studienrichtungList.add(tempStudienrichtung);
             }
         } catch (SQLException ex) {
+            
             System.out.println(ex.getMessage());
         }
+        
         
         return studienrichtungList;
     }
@@ -307,29 +395,17 @@ public class DataAccessObject implements edu.fhge.gdb.DataAccessObject {
     @Override
     public Collection<Modul> getAllModul() {
         
-        String sql = "SELECT * FROM MODUL";
-        
-        
-        Statement sqlStatement = null;
-        try {
-            sqlStatement = connection.createStatement();
-        } catch (SQLException ex) {
-            System.out.println(ex.getMessage());
-        }
-        
-        
-        ResultSet sqlResult = null;
-        try {
-            sqlResult = sqlStatement.executeQuery(sql);
-        } catch (SQLException ex) {
-            System.out.println(ex.getMessage());
-        }
-        
-        
         ArrayList<Modul> modulList =
                 new ArrayList<Modul>();
         
+        
+        String sql = "SELECT * FROM MODUL";
+        
+        ResultSet sqlResult = null;
         try {
+            
+            sqlResult = executeQuery(sql);
+            
             while(sqlResult.next()) {
                 
                 Modul tempModul =
@@ -344,8 +420,10 @@ public class DataAccessObject implements edu.fhge.gdb.DataAccessObject {
                 modulList.add(tempModul);
             }
         } catch (SQLException ex) {
+            
             System.out.println(ex.getMessage());
         }
+        
         
         return modulList;
     }
@@ -353,9 +431,8 @@ public class DataAccessObject implements edu.fhge.gdb.DataAccessObject {
     @Override
     public Collection<Praktikumsteilnahme> getAllPraktikumsteilnahme(
             Modul modul, String semester) {
-        
-        
-        return null;
+        // TODO Methode ausfertigen
+        throw new UnsupportedOperationException("Not supported yet.");
     }
     
     public boolean connect() {
@@ -363,15 +440,20 @@ public class DataAccessObject implements edu.fhge.gdb.DataAccessObject {
         boolean isConnected = true;
         
         Driver embeddedDriver = new org.apache.derby.jdbc.EmbeddedDriver();
+        
         try {
+            
             DriverManager.registerDriver(embeddedDriver);
         } catch (SQLException ex) {
+            
             System.out.println(ex.getMessage());
         }
         
         try {
+            
             connection = DriverManager.getConnection(jdbcURL);
         } catch(SQLException ex) {
+            
             isConnected = false;
             System.out.println("Connection could not be established.");
         }
@@ -381,12 +463,34 @@ public class DataAccessObject implements edu.fhge.gdb.DataAccessObject {
 
     @Override
     public void close() throws ApplicationException {
+        
         try {
+            
             connection.close();
             System.out.println("Connection successfully closed.");
         } catch (SQLException ex) {
+            
             System.out.println("Could not close connection.");
         }
     }
     
+    private ResultSet executeQuery(String sql) throws SQLException {
+        
+        Statement sqlStatement = null;
+        sqlStatement = connection.createStatement();
+        
+        
+        ResultSet sqlResult = null;
+        sqlResult = sqlStatement.executeQuery(sql);
+        
+        return sqlResult;
+    }
+    
+    private boolean execute(String sql) throws SQLException {
+        
+        Statement sqlStatement = null;
+        sqlStatement = connection.createStatement();
+        
+        return sqlStatement.execute(sql);
+    }
 }

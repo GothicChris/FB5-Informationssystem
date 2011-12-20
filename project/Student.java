@@ -68,11 +68,11 @@ public class Student implements edu.fhge.gdb.entity.Student{
         boolean equal = false;
         if (obj != null && getClass() == obj.getClass()) {
             Student student = (Student) obj;
-            equal = this.matrikelnummer.equals(student.matrikelnummer) &&
-                    this.name.equals(student.name) &&
-                    this.vorname.equals(student.vorname) &&
-                    this.adresse.equals(student.adresse) &&
-                    this.studienrichtung.equals(studienrichtung);
+            equal = this.matrikelnummer.equals(student.matrikelnummer) 
+                    && this.name.toLowerCase().equals(student.name.toLowerCase()) 
+                    && this.vorname.toLowerCase().equals(student.vorname.toLowerCase()) 
+                    && this.adresse.replaceAll("[\\w]*[\n]*", "").toLowerCase().equals(student.adresse.replaceAll("[\\w]*[\n]*", "").toLowerCase()) 
+                    && this.studienrichtung.equals(studienrichtung);
         }
         
         return equal;
