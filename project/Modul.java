@@ -8,7 +8,7 @@ package project;
  *
  * @author Christopher
  */
-public class Modul implements edu.fhge.gdb.entity.Modul{
+public class Modul implements edu.fhge.gdb.entity.Modul {
     
     private String kuerzel;
     
@@ -85,6 +85,10 @@ public class Modul implements edu.fhge.gdb.entity.Modul{
     @Override
     public String toString() {
         
+        return name + " (" + kuerzel + ")";
+    }
+    
+    public String getText() {
         String newKuerzel = this.kuerzel;
         
         switch (newKuerzel.length()) {
@@ -101,6 +105,7 @@ public class Modul implements edu.fhge.gdb.entity.Modul{
                + this.anzUebung + "  " + this.anzPraktikum 
                + "  " + this.credits;
     }
+    
     
     public int getWochenStunden() {
         return anzPraktikum + anzUebung + anzVorlesung;

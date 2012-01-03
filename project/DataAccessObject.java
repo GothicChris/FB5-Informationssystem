@@ -19,7 +19,20 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.swing.JPanel;
+import org.jfree.chart.ChartFactory;
+import org.jfree.chart.ChartPanel;
+import org.jfree.chart.JFreeChart;
+import org.jfree.chart.editor.DefaultChartEditorFactory;
+import org.jfree.chart.plot.PlotOrientation;
+import org.jfree.data.category.CategoryDataset;
+import org.jfree.data.category.DefaultCategoryDataset;
+import org.jfree.data.general.DefaultPieDataset;
+import org.jfree.data.jdbc.JDBCCategoryDataset;
+
+
 
 /**
  *
@@ -27,20 +40,38 @@ import javax.swing.JPanel;
  */
 public class DataAccessObject implements edu.fhge.gdb.DataAccessObject {
     
+    /**
+     * 
+     */
     Connection connection;
 
-    private final String driver = "org.apache.derby.jdbc.EmbeddedDriver";
     
+    /**
+     * 
+     */
     private String jdbcURL;
 
+    /**
+     * 
+     */
     public DataAccessObject() {
         jdbcURL = "jdbc:derby:eqal";
     }
 
+    /**
+     * 
+     * @param jdbcURL 
+     */
     public DataAccessObject(String jdbcURL) {
         this.jdbcURL = jdbcURL;
     }
     
+    /**
+     * 
+     * @param sr
+     * @return
+     * @throws ApplicationException 
+     */
     @Override
     public List<List<String>> getStudienverlaufsplan(Studienrichtung sr)
             throws ApplicationException {
@@ -163,20 +194,29 @@ public class DataAccessObject implements edu.fhge.gdb.DataAccessObject {
         return spalten;
     }
 
+    /**
+     * 
+     * @param matrikel
+     * @param name
+     * @param vorname
+     * @param adresse
+     * @param srKuerzel
+     * @throws ApplicationException 
+     */
     @Override
     public void addStudent(String matrikel, String name, String vorname,
             String adresse, String srKuerzel) throws ApplicationException {
         
         
-        String sql = "INSERT INTO STUDENT (MATRIKEL, NAME, VORNAME,"
-                + " ADRESSE, SKUERZEL)"
+        String sql = "INSERT INTO STUDENT"
+                + " (MATRIKEL, NAME, VORNAME, ADRESSE, SKUERZEL)"
                 + " VALUES ('" + matrikel + "', '" + name + "', '"
-                + vorname + "',"
-                + " '" + adresse + "', '" + srKuerzel + "')";
+                + vorname + "'," + " '" + adresse + "', '" + srKuerzel + "')";
         
         try {
             
             execute(sql);
+            System.out.println("eingetragen");
         } catch (SQLException ex) {
             
             System.out.println(ex.getMessage());
@@ -184,15 +224,19 @@ public class DataAccessObject implements edu.fhge.gdb.DataAccessObject {
         }
     }
 
+    /**
+     * 
+     * @return 
+     */
     @Override
     public Collection<Student> getAllStudent() {
         
         ArrayList<Student> studentList = new ArrayList<Student>();
         
         
-        String sql = "SELECT S.*, SR.SKUERZEL, SR.NAME AS SRNAME"
+        String sql = "SELECT S.*, SR.SKUERZEL AS SRKUERZEL, SR.NAME AS SRNAME"
                 + " FROM STUDENT S, STUDIENRICHTUNG SR"
-                + " WHERE S.STUDIENRICHTUNG = SR.SKUERZEL"
+                + " WHERE S.SKUERZEL = SR.SKUERZEL"
                 + " ORDER BY S.NAME";
         
         ResultSet sqlResult = null;
@@ -203,12 +247,12 @@ public class DataAccessObject implements edu.fhge.gdb.DataAccessObject {
             while(sqlResult.next()) {
                 
                 Student tempStudent = new project.Student(
-                        sqlResult.getString("MARTIKELNUMMER"),
+                        sqlResult.getString("MATRIKEL"),
                         sqlResult.getString("NAME"),
                         sqlResult.getString("VORNAME"),
                         sqlResult.getString("ADRESSE"),
                         new project.Studienrichtung(
-                                sqlResult.getString("SKUERZEL"),
+                                sqlResult.getString("SRKUERZEL"),
                                 sqlResult.getString("SRNAME")));
                 
                 studentList.add(tempStudent);
@@ -222,21 +266,76 @@ public class DataAccessObject implements edu.fhge.gdb.DataAccessObject {
         return studentList;
     }
 
+    /**
+     * 
+     * @param matrikel
+     * @param name
+     * @param vorname
+     * @param adresse
+     * @param srKuerzel
+     * @param modul
+     * @param semester
+     * @return
+     * @throws ApplicationException 
+     */
     @Override
     public boolean announce(String matrikel, String name, String vorname,
             String adresse, String srKuerzel, Modul modul, String semester)
             throws ApplicationException {
         
         boolean announced = true;
+        String sql;
+        ResultSet resultSet =  null;
         
-        String sql = "SELECT NAME"
+        /**
+         * Prüfung ob das Modul überhaupt ein Praktikum vorsieht.
+         */
+        sql = "SELECT PR"
+                + " FROM MODUL"
+                + " WHERE MKUERZEL = '" + modul.getKuerzel() + "'";
+        
+        try {
+            resultSet = executeQuery(sql);
+        
+            if(resultSet.next() && resultSet.getInt("PR") == 0) {
+                
+                throw new ApplicationException("Das Modul sieht kein Praktikum vor");
+            }
+            
+        } catch (SQLException ex) {
+            
+            throw new ApplicationException(ex.getMessage());
+        }
+        
+        /*
+         * Prüfung ob das übergebene Modul nicht Bestandteil der Studienrichtung
+         * des anzumeldenden Studenten ist.
+         */
+        sql = "SELECT *"
+                + " FROM KATEGORIEUMFANG"
+                + " WHERE MKUERZEL = '" + modul.getKuerzel() + "'"
+                + " AND SKUERZEL = '" + srKuerzel + "'";
+        
+        try {
+            resultSet = executeQuery(sql);
+        
+            if(!resultSet.next()) {
+                
+                throw new ApplicationException("Der Student hat dieses Modul nicht belegt.");
+            }
+            
+        } catch (SQLException ex) {
+            
+            throw new ApplicationException(ex.getMessage());
+        }
+        
+        sql = "SELECT NAME"
                 + " FROM STUDIENRICHTUNG"
-                + " WHERE SRKUERZEL = '" + srKuerzel + "'";
+                + " WHERE SKUERZEL = '" + srKuerzel + "'";
         
-        ResultSet targetStudienrichtungResult =  null;
         try {
             
-            targetStudienrichtungResult = executeQuery(sql);
+            resultSet = executeQuery(sql);
         } catch (SQLException ex) {
             
             throw new ApplicationException(ex.getMessage());
@@ -245,11 +344,11 @@ public class DataAccessObject implements edu.fhge.gdb.DataAccessObject {
         project.Studienrichtung targetStudienrichtung = null;
         try {
             
-            if(targetStudienrichtungResult.next()) {
+            if(resultSet.next()) {
                 
                 targetStudienrichtung =
                         new project.Studienrichtung(srKuerzel,
-                                targetStudienrichtungResult.getString("NAME"));
+                                resultSet.getString("NAME"));
             } else {
                 throw new ApplicationException(
                         "Studienrichtung nicht vorhanden!");
@@ -271,10 +370,9 @@ public class DataAccessObject implements edu.fhge.gdb.DataAccessObject {
                 + " WHERE MATRIKEL = '" + matrikel + "'"
                 + " AND S.SKUERZEL = SR.SKUERZEL";
         
-        ResultSet studentFromDatabaseResult = null;
         try {
             
-            studentFromDatabaseResult = executeQuery(sql);
+            resultSet = executeQuery(sql);
         } catch (SQLException ex) {
             
             throw new ApplicationException(ex.getMessage());
@@ -285,14 +383,14 @@ public class DataAccessObject implements edu.fhge.gdb.DataAccessObject {
         
         try {
             
-            if(studentFromDatabaseResult.next()) {
+            if(resultSet.next()) {
                 sfdbStudienrichtung = new project.Studienrichtung(srKuerzel,
-                        studentFromDatabaseResult.getString("SRNAME"));
+                        resultSet.getString("SRNAME"));
                 studentFromDatabase = new project.Student(
-                        studentFromDatabaseResult.getString("MATRIKEL"),
-                        studentFromDatabaseResult.getString("NAME"),
-                        studentFromDatabaseResult.getString("VORNAME"),
-                        studentFromDatabaseResult.getString("ADRESSE"),
+                        resultSet.getString("MATRIKEL"),
+                        resultSet.getString("NAME"),
+                        resultSet.getString("VORNAME"),
+                        resultSet.getString("ADRESSE"),
                         sfdbStudienrichtung);
             }
         } catch (SQLException ex) {
@@ -345,13 +443,170 @@ public class DataAccessObject implements edu.fhge.gdb.DataAccessObject {
     @Override
     public void setTestate(Collection<Praktikumsteilnahme> testate) {
         // TODO Methode ausfertigen
-        throw new UnsupportedOperationException("Not supported yet.");
+        
+        /**
+         * Alle Testate Updaten
+         */
+
+        for(Praktikumsteilnahme praktikum : testate) {
+                
+            int testat = (praktikum.isTestat()) ? 1 : 0;
+            String sql =" UPDATE PRAKTIKUMSTEILNAHME SET TESTAT = " + testat
+                        + " WHERE MATRIKEL = '" + praktikum.getStudent().getMatrikel() + "'"
+                        + " AND MKUERZEL = '" + praktikum.getModul().getKuerzel() + "'"
+                        + " AND SEMESTER = '" + praktikum.getSemester() + "'";
+            try {
+                execute(sql);
+            } catch (SQLException ex) {
+                System.out.println("Fehler beim setzen der Testate\n"
+                        + ex.getMessage());
+            }
+            
+        }
     }
 
     @Override
-    public JPanel getChart(int type, Object parameter1, Object parameter2) throws ApplicationException {
+    public JPanel getChart(int type, Object parameter1, Object parameter2)
+            throws ApplicationException {
         // TODO Methode ausfertigen
-        throw new UnsupportedOperationException("Not supported yet.");
+        
+        
+        JFreeChart chart = null;
+        
+        switch(type) {
+            case VISUALISIERUNG_ANTEIL_TESTATABNAHMEN: {
+                
+                /* Parameter 1 muss String sein, Parameter 2 muss NULL sein.*/
+                if(!(parameter1 instanceof String && parameter2 == null)) {
+                    throw new ApplicationException("Die übergebenen Basisparameter passen nicht zum Visualisierungstyp.");
+                }
+                
+                String semester = (String) parameter1;
+                DefaultCategoryDataset dataset = new DefaultCategoryDataset();
+                
+                /* Iteration über alle Studienrichtungen. */
+                for(Studienrichtung studr : this.getAllStudienrichtung()) {
+                    
+                    /* Anzahl der Studenten die sich für ein Praktikum eines 
+                      Moduls in einem bestimmten Semester angemeldet haben. */
+                    String sql = "SELECT M.MKUERZEL AS Modul, Count(*) AS Anmeldungen"
+                               + " FROM MODUL M, PRAKTIKUMSTEILNAHME P, STUDENT S" 
+                               + " WHERE P.MATRIKEL = S.MATRIKEL"
+                               + " AND M.MKUERZEL = P.MKUERZEL"
+                               + " AND M.PR > 0"
+                               + " AND P.SEMESTER = '" + semester + "'"
+                               + " AND S.SKUERZEL = '" + studr.getKuerzel() + "'"
+                               + " GROUP BY M.MKUERZEL";
+                    
+                    ResultSet resultSet = null;
+                    try {
+                        
+                        resultSet = executeQuery(sql);
+                        while(resultSet.next()) {
+                            /* Speichern der Anzahl der ANmeldungen zu einem 
+                             * Modul */
+                            String modul = resultSet.getString("Modul");
+                            int anmeldungen = resultSet.getInt("Anmeldungen");
+                            
+                            /* Anzahl der Bestandenen Praktikas eines Moduls
+                             in einem bestimmten Semester*/
+                            sql = "SELECT M.MKUERZEL AS Modul, Count(*) AS Bestanden"
+                                    + " FROM MODUL M, PRAKTIKUMSTEILNAHME P, STUDENT S" 
+                                    + " WHERE P.MATRIKEL = S.MATRIKEL"
+                                    + " AND M.MKUERZEL = P.MKUERZEL"
+                                    + " AND M.MKUERZEL = '" + modul + "'"
+                                    + " AND M.PR > 0"
+                                    + " AND P.SEMESTER = '" + semester + "'"
+                                    + " AND S.SKUERZEL = '" + studr.getKuerzel() + "'"
+                                    + " AND P.TESTAT > 0"
+                                    + " GROUP BY M.MKUERZEL";
+                            
+                            int bestanden = 0;
+                            ResultSet resultSet1 = executeQuery(sql);
+                            if(resultSet1.next()) {
+                                bestanden = resultSet1.getInt("Bestanden");
+                            }
+                            
+                            /* Berechnung des Prozentualen Anteils von 
+                             bestanden zu teilgenommen */
+                            double wert = (bestanden == 0) 
+                                    ? 0 
+                                    : (double) bestanden / (double) anmeldungen * 100;
+                            
+                            /* Dataset die Werte übergeben
+                              % - Wert, Modulname, Studienrichtung */
+                            dataset.addValue(wert, modul, studr.getKuerzel());
+                        }
+
+                    } catch (SQLException ex) {
+                        System.out.println(ex.getMessage());
+                    }
+                    
+                    
+                }
+                /* Neues Balken Diagramm erzeugen mit folgenden Werte:
+                 * Titel, X-Achse Beschreibung, Y-Achse Beschreibung, Daten,
+                 * Vertical/Horizontal, Legende, Tooltip, URL. 
+                 */
+                chart = ChartFactory.createBarChart(semester,
+                        "Praktikumsmodule nach Studienrichtung",
+                        "Erfolgreiche Teilnahme in %",
+                        dataset,
+                        PlotOrientation.VERTICAL,
+                        true,
+                        true,
+                        false);
+
+            } 
+            break;
+            
+            case VISUALISIERUNG_AUFTEILUNG_ANMELDUNGEN: {
+                
+                if(!(parameter1 instanceof Studienrichtung
+                    && parameter2 instanceof String)) {
+                    throw new ApplicationException("Die übergebenen Basisparameter passen nicht zum Visualisierungstyp.");
+                }
+                
+                Studienrichtung studienrichtung = (Studienrichtung) parameter1;
+                String semester = (String) parameter2;
+                
+            } 
+            break;
+            
+            case VISUALISIERUNG_ENTWICKLUNG_ANMELDUNGEN: {
+                if(!(parameter1 instanceof Modul
+                    && parameter2 == null)) {
+                    throw new ApplicationException("Die übergebenen Basisparameter passen nicht zum Visualisierungstyp.");
+                }
+                
+                Modul modul = (Modul) parameter1;
+                
+                
+            } 
+            break;
+            
+            case VISUALISIERUNG_ANMELDUNGEN_TESTATE: {
+                if(!(parameter1 instanceof Studienrichtung
+                    && parameter2 instanceof String)) {
+                    throw new ApplicationException("Die übergebenen Basisparameter passen nicht zum Visualisierungstyp.");
+                }
+                Studienrichtung studienrichtung = (Studienrichtung) parameter1;
+                String semester = (String) parameter2;
+                
+            } 
+            break;
+            
+            default: {
+                
+                throw new ApplicationException("Der Visualisierungstyp ist nicht definiert.");
+            }
+        }
+        
+        
+        return new ChartPanel(chart);
+            
+        
+        
     }
 
     @Override
@@ -392,6 +647,11 @@ public class DataAccessObject implements edu.fhge.gdb.DataAccessObject {
         return studienrichtungList;
     }
 
+    
+    /**
+     * Gibt alle Module in Sortierten Reihenfolge zurück.
+     * @return Collection von allen Modulen.
+     */
     @Override
     public Collection<Modul> getAllModul() {
         
@@ -399,7 +659,7 @@ public class DataAccessObject implements edu.fhge.gdb.DataAccessObject {
                 new ArrayList<Modul>();
         
         
-        String sql = "SELECT * FROM MODUL";
+        String sql = "SELECT * FROM MODUL ORDER BY MODULNAME ASC";
         
         ResultSet sqlResult = null;
         try {
@@ -424,17 +684,88 @@ public class DataAccessObject implements edu.fhge.gdb.DataAccessObject {
             System.out.println(ex.getMessage());
         }
         
-        
         return modulList;
     }
 
+    
+    /**
+     * Methode zum aktualisieren aller Praktikumsteilnahmen von einem bestimmten Modul
+     * in einem bestimmten Semester.
+     * @param modul
+     * @param semester
+     * @return 
+     */
     @Override
     public Collection<Praktikumsteilnahme> getAllPraktikumsteilnahme(
             Modul modul, String semester) {
         // TODO Methode ausfertigen
-        throw new UnsupportedOperationException("Not supported yet.");
+        
+        ArrayList<Praktikumsteilnahme> praktikumlist = 
+                new ArrayList<Praktikumsteilnahme>();
+        
+        /* Falls kein Semester oder kein Modul gewählt wurde, alles überspringen */
+        if(!semester.isEmpty() && modul != null) {
+            
+            /* SELECT Abfrage: Filtern nach Studentdaten und Praktikumsdaten
+             zu einem bestimmten Modul und Semester */
+            String sql = "SELECT P.MATRIKEL, P.TESTAT, S.NAME, S.VORNAME, S.ADRESSE, S.SKUERZEL, SR.NAME AS SRNAME "
+                    + "FROM PRAKTIKUMSTEILNAHME P, STUDENT S, STUDIENRICHTUNG SR "
+                    + "WHERE P.SEMESTER = '" + semester + "' "
+                    + "AND P.MKUERZEL = '" + modul.getKuerzel() + "' "
+                    + "AND P.MATRIKEL = S.MATRIKEL "
+                    + "AND S.SKUERZEL = SR.SKUERZEL";
+
+
+            ResultSet sqlResult = null;
+            try {
+
+                sqlResult = executeQuery(sql);
+
+
+                while(sqlResult.next()) {
+
+                    project.Studienrichtung tmpStudienrichtung = 
+                                         new project.Studienrichtung(
+                                                 sqlResult.getString("SKUERZEL"), 
+                                                 sqlResult.getString("SRNAME"));
+
+                    project.Student tmpStudent = 
+                                         new project.Student(
+                                            sqlResult.getString("MATRIKEL"), 
+                                            sqlResult.getString("NAME"), 
+                                            sqlResult.getString("VORNAME"), 
+                                            sqlResult.getString("ADRESSE"), 
+                                            tmpStudienrichtung);
+
+
+                    project.Praktikumsteilnahme tempPraktikum =
+                                        new project.Praktikumsteilnahme(
+                                                tmpStudent, 
+                                                modul, 
+                                                semester, 
+                                                sqlResult.getInt("TESTAT") > 0);
+
+                    praktikumlist.add(tempPraktikum);
+                }
+            } catch (SQLException ex) {
+
+                System.out.println(ex.getMessage());
+            }
+        }
+        
+        
+        return praktikumlist;
+        
     }
     
+    /**
+     * Verbindet dieses Object mit der Datenbank und gibt <code>true</code> 
+     * zurück, wenn die Verbindung erfolgreich aufgebaut wurde, sonst ein
+     * <code>false</code>.
+     * 
+     * @return <code>true</code> wenn die Verbindung erfolgreich aufgebaut
+     * wurde, sonst <code>false</code>.
+     */
     public boolean connect() {
         
         boolean isConnected = true;
@@ -461,19 +792,35 @@ public class DataAccessObject implements edu.fhge.gdb.DataAccessObject {
         return isConnected;
     }
 
+    /**
+     * Schließt die Verbindung dieses DataAccessObjects zur Datenbank.
+     * 
+     * @throws ApplicationException wenn die Verbindung nicht geschlossen werden
+     * konnte.
+     */
     @Override
     public void close() throws ApplicationException {
         
         try {
             
             connection.close();
+            connection = null;
             System.out.println("Connection successfully closed.");
         } catch (SQLException ex) {
             
-            System.out.println("Could not close connection.");
+            throw new ApplicationException(
+                    "unable to close database connection");
         }
     }
     
+    /**
+     * Führt einen SQL-Query mit der Datenbank aus. Gibt das Abfrageergebnis
+     * als ResultSet zurück.
+     * 
+     * @param sql Der SQL-Befehl, der an die Datenbank geschickt werden soll.
+     * @return Das Ergebnis der Abfrage als ResultSet.
+     * @throws SQLException wenn bei der SQL-Abfrage ein SQL-Fehler auftritt.
+     */
     private ResultSet executeQuery(String sql) throws SQLException {
         
         Statement sqlStatement = null;
@@ -486,6 +833,16 @@ public class DataAccessObject implements edu.fhge.gdb.DataAccessObject {
         return sqlResult;
     }
     
+    /**
+     * Führt einen SQL-Befehl auf der Datenbank aus. Bei den Befehlen kann es
+     * sich um Befehle handeln, die keine Zeilen als Rückgabeergebnis erwarten.
+     * D.h. z.B. INSERT, UPDATE usw.
+     * 
+     * @param sql Der SQL-Befehl, der an die Datenbank gesendet werden soll.
+     * @return <code>true</code> falls der Befehl erfolgreich ausgeführt wurde,
+     * sonst <code>false</code>
+     * @throws SQLException wenn bei der SQL-Abfrage ein SQL-Fehler auftritt.
+     */
     private boolean execute(String sql) throws SQLException {
         
         Statement sqlStatement = null;

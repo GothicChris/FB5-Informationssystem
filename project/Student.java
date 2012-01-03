@@ -56,6 +56,10 @@ public class Student implements edu.fhge.gdb.entity.Student{
 
     @Override
     public String toString() {
+        return name + ", " + vorname + " (" + matrikelnummer + ")";
+    }
+    
+    public String getText() {
         return "Matrikelnummer=" + matrikelnummer 
                 + ", Name=" + name 
                 + ", Vorname=" + vorname 

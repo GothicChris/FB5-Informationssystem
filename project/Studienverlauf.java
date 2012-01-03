@@ -55,7 +55,7 @@ public class Studienverlauf {
         if(semester.containsKey(semesterNr)) {
             module = semester.get(semesterNr);
             for(int i = 0; i < module.size(); i++) {
-                returnString += "\n" + module.get(i).toString();
+                returnString += "\n" + module.get(i).getText();
             }
         } else {
             returnString = "";
