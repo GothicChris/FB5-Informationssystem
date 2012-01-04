@@ -25,12 +25,9 @@ import javax.swing.JPanel;
 import org.jfree.chart.ChartFactory;
 import org.jfree.chart.ChartPanel;
 import org.jfree.chart.JFreeChart;
-import org.jfree.chart.editor.DefaultChartEditorFactory;
 import org.jfree.chart.plot.PlotOrientation;
-import org.jfree.data.category.CategoryDataset;
 import org.jfree.data.category.DefaultCategoryDataset;
 import org.jfree.data.general.DefaultPieDataset;
-import org.jfree.data.jdbc.JDBCCategoryDataset;
 
 
 
@@ -442,8 +439,6 @@ public class DataAccessObject implements edu.fhge.gdb.DataAccessObject {
 
     @Override
     public void setTestate(Collection<Praktikumsteilnahme> testate) {
-        // TODO Methode ausfertigen
-        
         /**
          * Alle Testate Updaten
          */
@@ -570,6 +565,44 @@ public class DataAccessObject implements edu.fhge.gdb.DataAccessObject {
                 Studienrichtung studienrichtung = (Studienrichtung) parameter1;
                 String semester = (String) parameter2;
                 
+                DefaultPieDataset dataset = new DefaultPieDataset();
+                
+                String sql = "SELECT M.MKUERZEL AS Modul, Count(*) AS Anmeldungen"
+                               + " FROM MODUL M, PRAKTIKUMSTEILNAHME P, STUDENT S" 
+                               + " WHERE P.MATRIKEL = S.MATRIKEL"
+                               + " AND M.MKUERZEL = P.MKUERZEL"
+                               + " AND M.PR > 0"
+                               + " AND P.SEMESTER = '" + semester + "'"
+                               + " AND S.SKUERZEL = '" + studienrichtung.getKuerzel() + "'"
+                               + " GROUP BY M.MKUERZEL";
+                try {
+                    ResultSet resultSet = executeQuery(sql);
+
+                    int i = 0;
+                    
+                    while(resultSet.next()) {
+
+                        int tmpAnmelungen = resultSet.getInt("Anmeldungen");
+                        String tmpModul = resultSet.getString("Modul");
+                        
+                        /* SchlüsselText zusammenbauen */
+                        String key = tmpModul + ": " + tmpAnmelungen + " Anmeldungen";
+                        
+                        dataset.insertValue(i, key, tmpAnmelungen);
+                        i++;
+                    }
+                } catch (SQLException ex) {
+                    System.out.println(ex.getMessage());
+                }
+                
+                /* PieChart erstellen: Titel, Daten, Legende, ToolTip, URL */
+                chart = ChartFactory.createPieChart(
+                        studienrichtung.toString() + " (" + semester + ")", 
+                        dataset, 
+                        true, 
+                        true, 
+                        false);
+                
             } 
             break;
             
@@ -581,6 +614,36 @@ public class DataAccessObject implements edu.fhge.gdb.DataAccessObject {
                 
                 Modul modul = (Modul) parameter1;
                 
+                DefaultCategoryDataset dataset = new DefaultCategoryDataset();
+                
+                /* Anmeldungen/Testate zu einem Modul in allen Semestern*/
+                String sql = "SELECT count(*) AS Anmeldungen, P.SEMESTER, SUM(P.TESTAT) AS Testatvergaben"
+                            + " FROM PRAKTIKUMSTEILNAHME P" 
+                            + " WHERE P.MKUERZEL = '" + modul.getKuerzel() + "'"
+                            + " GROUP BY P.SEMESTER";
+                try {
+                    ResultSet resultSet = executeQuery(sql);
+                    
+                    while(resultSet.next()) {
+                        String semester = resultSet.getString("Semester");
+                        int anmeldungen = resultSet.getInt("Anmeldungen");
+                        int testate = resultSet.getInt("Testatvergaben");
+                        dataset.addValue(anmeldungen, "Anmeldungen", semester);
+                        dataset.addValue(testate, "Testatvergaben", semester);
+                    }
+                } catch (SQLException ex) {
+                    System.out.println(ex.getMessage());
+                }
+                
+               chart = ChartFactory.createLineChart(
+                        modul.getName() + " (" + modul.getKuerzel() + ")", 
+                        "Semester", 
+                        "Studierende", 
+                        dataset, 
+                        PlotOrientation.VERTICAL, 
+                        true, 
+                        true, 
+                        false);
                 
             } 
             break;
@@ -590,9 +653,43 @@ public class DataAccessObject implements edu.fhge.gdb.DataAccessObject {
                     && parameter2 instanceof String)) {
                     throw new ApplicationException("Die übergebenen Basisparameter passen nicht zum Visualisierungstyp.");
                 }
+                
                 Studienrichtung studienrichtung = (Studienrichtung) parameter1;
                 String semester = (String) parameter2;
                 
+                DefaultCategoryDataset dataset = new DefaultCategoryDataset();
+                
+                String sql = "SELECT count(*) AS Anmeldungen, SUM(P.TESTAT) AS Testatvergaben, P.MKUERZEL AS Modul"
+                            + " FROM PRAKTIKUMSTEILNAHME P, KATEGORIEUMFANG K"
+                            + " WHERE P.SEMESTER = '" + semester + "'"
+                            + " AND P.MKUERZEL = K.MKUERZEL"
+                            + " AND K.SKUERZEL = '" + studienrichtung.getKuerzel() + "'"
+                            + " GROUP BY P.MKUERZEL";
+                try {
+                    ResultSet resultSet = executeQuery(sql);
+
+                    while(resultSet.next()) {
+                        String modulName = resultSet.getString("Modul");
+                        int anmeldungen = resultSet.getInt("Anmeldungen");
+                        int testatvergaben = resultSet.getInt("Testatvergaben");
+                        
+                        dataset.addValue(anmeldungen, "Anmeldungen", modulName);
+                        dataset.addValue(testatvergaben, "Testatvergaben", modulName);
+                    }
+
+                } catch (SQLException ex) {
+                    System.out.println(ex.getMessage());
+                }
+                
+                chart = ChartFactory.createBarChart(
+                        studienrichtung.getName() + " (" + studienrichtung.getKuerzel() + ")", 
+                        "Modul", 
+                        "Studierende", 
+                        dataset, 
+                        PlotOrientation.VERTICAL, 
+                        true, 
+                        true, 
+                        false);
             } 
             break;
             
