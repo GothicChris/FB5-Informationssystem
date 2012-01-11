@@ -4,6 +4,14 @@
  */
 package project;
 
+import com.lowagie.text.Document;
+import com.lowagie.text.DocumentException;
+import com.lowagie.text.PageSize;
+import com.lowagie.text.Phrase;
+import com.lowagie.text.Rectangle;
+import com.lowagie.text.pdf.PdfPCell;
+import com.lowagie.text.pdf.PdfPTable;
+import com.lowagie.text.pdf.PdfWriter;
 import edu.fhge.gdb.ApplicationException;
 import edu.fhge.gdb.entity.Modul;
 import edu.fhge.gdb.entity.Praktikumsteilnahme;
@@ -18,9 +26,12 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+import java.util.Set;
 import javax.swing.JPanel;
 import org.jfree.chart.ChartFactory;
 import org.jfree.chart.ChartPanel;
@@ -706,10 +717,148 @@ public class DataAccessObject implements edu.fhge.gdb.DataAccessObject {
         
     }
 
+    /**
+     * PDF Creator
+     * @param target
+     * @param semester 
+     */
     @Override
     public void exportAnnouncementList(OutputStream target, String semester) {
         // TODO Methode ausfertigen
-        throw new UnsupportedOperationException("Not supported yet.");
+        try {
+            Document pdfDocument = new Document(PageSize.A4);
+            pdfDocument.setMargins(40, 40, 40, 40);
+            PdfWriter.getInstance(pdfDocument, target);
+            pdfDocument.open();
+            
+            String sql = "SELECT P.MKUERZEL, M.MODULNAME, P.SEMESTER, SR.SKUERZEL, S.MATRIKEL, S.VORNAME, S.NAME"
+                        + " FROM PRAKTIKUMSTEILNAHME P, STUDIENRICHTUNG SR, KATEGORIEUMFANG KU, STUDENT S, MODUL M"
+                        + " WHERE P.SEMESTER = '" + semester + "'"
+                        + " AND P.MKUERZEL = KU.MKUERZEL"
+                        + " AND KU.SKUERZEL = SR.SKUERZEL"
+                        + " AND P.MATRIKEL = S.MATRIKEL"
+                        + " AND S.SKUERZEL = SR.SKUERZEL"
+                        + " AND P.MKUERZEL = M.MKUERZEL"
+                        + " GROUP BY P.MKUERZEL, M.MODULNAME, P.SEMESTER, SR.SKUERZEL, S.MATRIKEL, S.VORNAME, S.NAME" 
+                        + " ORDER BY MKUERZEL, S.NAME";
+
+            /* Modul: SKuerzel, List: */
+            HashMap<project.Modul, HashMap<String, Set>> modulTabelle = new HashMap<project.Modul, HashMap<String, Set>>();
+            
+            ResultSet resultSet = executeQuery(sql);
+            
+            while(resultSet.next()) {
+                String mkuerzel = resultSet.getString("MKUERZEL");
+                String modulname = resultSet.getString("MODULNAME");
+                String skuerzel = resultSet.getString("SKUERZEL");
+                String matrikel = resultSet.getString("MATRIKEL");
+                String vorname = resultSet.getString("VORNAME");
+                String name = resultSet.getString("NAME");
+                
+                project.Modul tmpModul = new project.Modul();
+                tmpModul.setKuerzel(mkuerzel);
+                tmpModul.setName(modulname);
+                
+                
+                if(modulTabelle.containsKey(tmpModul)) {
+                    
+                    HashMap<String, Set> inhalt = modulTabelle.get(tmpModul);
+                    
+                    inhalt.get("Studienrichtung").add(skuerzel);
+                    
+                    project.Student student = new project.Student(matrikel, name, vorname, null, null);
+                    inhalt.get("Student").add(student);
+                } else {
+                    
+                    HashMap<String, Set> inhalt = new HashMap<String, Set>();
+                    
+                    Set studienrichtungen = new HashSet();
+                    studienrichtungen.add(skuerzel);
+                    
+                    project.Student student = new project.Student(matrikel, name, vorname, null, null);
+                    Set<project.Student> studenten = new HashSet<project.Student>();
+                    studenten.add(student);
+                    
+                    inhalt.put("Studienrichtung", studienrichtungen);
+                    inhalt.put("Student", studenten);
+                    
+                    modulTabelle.put(tmpModul, inhalt);
+                }
+            }
+            
+            /*
+             * Liste der Modultabllen ist erstellt. Jetzt muss das Dokument erstellt werden.
+             */
+            Set<project.Modul> modulSet = modulTabelle.keySet();
+            ArrayList<project.Modul> modulListe = new ArrayList<project.Modul>(modulSet);
+            Collections.sort(modulListe);
+            Iterator<project.Modul> iterator = modulListe.iterator();
+
+            while(iterator.hasNext()) {
+                project.Modul aktuellesModul = iterator.next();
+                Set<String> studienrichtungen = modulTabelle.get(aktuellesModul)
+                        .get("Studienrichtung");
+                Set<Student> studenten = modulTabelle.get(aktuellesModul)
+                        .get("Student");
+
+                pdfDocument.newPage();
+
+                PdfPTable tabelle = new PdfPTable(3);
+
+//                Rectangle tablesize = PageSize.A4;
+//                
+//                tablesize.setBottom(tablesize.getBottom() - 40.0F);
+//                tablesize.setTop(tablesize.getTop() + 40.0F);
+//                tablesize.setLeft(tablesize.getLeft() + 40.0F);
+//                tablesize.setRight(tablesize.getRight() - 40.0F);
+                
+//                float spaltenBreiten[] = {30.0F, 20.0F, 10.0F};
+//                tabelle.setWidthPercentage(spaltenBreiten, PageSize.A4);
+                PdfPCell zelle = new PdfPCell(new Phrase(aktuellesModul.toString()));
+                zelle.setColspan(2);
+
+                tabelle.addCell(zelle);
+
+                tabelle.addCell(semester);
+
+                String studienrichtungenString = "";
+
+                for (String skuerzel : studienrichtungen) {
+                    studienrichtungenString += (skuerzel + "/");
+                }
+
+                studienrichtungenString = studienrichtungenString.substring(0, studienrichtungenString.length() - 1);
+
+                zelle = new PdfPCell(new Phrase(studienrichtungenString));
+                zelle.setColspan(3);
+                tabelle.addCell(zelle);
+
+                tabelle.addCell("Name, Vorname");
+
+                zelle = new PdfPCell(new Phrase("Matrikelnumer"));
+                zelle.setColspan(2);
+
+                tabelle.addCell(zelle);
+
+                for (Iterator<Student> it = studenten.iterator(); it.hasNext();) {
+                    Student student = it.next();
+
+                    tabelle.addCell(student.getName() + ", " + student.getVorname());
+                    zelle = new PdfPCell(new Phrase(student.getMatrikel()));
+                    zelle.setColspan(2);
+
+                    tabelle.addCell(zelle);
+                }
+
+                pdfDocument.add(tabelle);
+            }
+
+            pdfDocument.close();
+        } catch (DocumentException ex) {
+            System.out.println(ex.getMessage());
+        } catch (SQLException sqlE) {
+            System.out.println(sqlE.getMessage());
+        }
     }
 
     @Override

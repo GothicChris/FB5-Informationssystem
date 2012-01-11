@@ -8,7 +8,7 @@ package project;
  *
  * @author Christopher
  */
-public class Modul implements edu.fhge.gdb.entity.Modul {
+public class Modul implements edu.fhge.gdb.entity.Modul, Comparable<Modul> {
     
     private String kuerzel;
     
@@ -30,6 +30,9 @@ public class Modul implements edu.fhge.gdb.entity.Modul {
         this.anzUebung = anzUebung;
         this.anzPraktikum = anzPraktikum;
         this.credits = credits;
+    }
+
+    public Modul() {
     }
 
     @Override
@@ -110,7 +113,35 @@ public class Modul implements edu.fhge.gdb.entity.Modul {
     public int getWochenStunden() {
         return anzPraktikum + anzUebung + anzVorlesung;
     }
-    
-    
+
+    public void setAnzPraktikum(int anzPraktikum) {
+        this.anzPraktikum = anzPraktikum;
+    }
+
+    public void setAnzUebung(int anzUebung) {
+        this.anzUebung = anzUebung;
+    }
+
+    public void setAnzVorlesung(int anzVorlesung) {
+        this.anzVorlesung = anzVorlesung;
+    }
+
+    public void setCredits(int credits) {
+        this.credits = credits;
+    }
+
+    public void setKuerzel(String kuerzel) {
+        this.kuerzel = kuerzel;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    @Override
+    public int compareTo(Modul o) {
+        
+        return this.kuerzel.compareTo(o.kuerzel);
+    }
     
 }
